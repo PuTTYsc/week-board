@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Week board</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{--slate:#38546E;--paper:#EDEAE7;--coral:#F0524F;--ink:#1F2F3E;--sub:#4A5F73}
+*{box-sizing:border-box}
+body{margin:0;background:var(--slate);color:#fff;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:760px;margin:0 auto}
+header{background:var(--paper);padding:18px 16px 12px;text-align:right}
+h1{margin:0;font-size:26px;line-height:1.1;font-weight:700;color:var(--coral);text-transform:uppercase}
+header p{margin:6px 0 10px;font-size:14px;color:#2B2B2B}
+.nav{display:flex;gap:8px;justify-content:flex-end}
+button{font:inherit;font-size:13px;background:transparent;color:var(--ink);border:1px solid rgba(31,47,62,.35);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{background:rgba(31,47,62,.08)}
+button:focus-visible{outline:2px solid var(--coral);outline-offset:2px}
+main{padding:16px 14px 40px}
+.dh{font-size:14px;font-weight:700;text-transform:uppercase;margin:0 0 8px;display:flex;gap:8px;align-items:center}
+.tag{font-size:11px;background:var(--coral);color:#fff;padding:1px 6px;border-radius:4px;font-weight:400;text-transform:none}
+.day{margin:0 0 18px;scroll-margin-top:12px}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.n{background:var(--paper);color:var(--ink);border-radius:6px;padding:9px 10px;font-size:14px;line-height:1.3;display:block;text-decoration:none}
+.n b{display:block;font-weight:600}
+.n span{font-size:12px;color:var(--sub)}
+.now{border-left:3px solid var(--coral);border-radius:0 6px 6px 0}
+.t{border:1px solid rgba(255,255,255,.55);border-radius:6px;padding:9px 10px;font-size:14px;display:flex;gap:8px;align-items:center;line-height:1.3}
+.bx{width:12px;height:12px;border:1.5px solid #fff;border-radius:3px;flex:none}
+.dn{width:12px;height:12px;border-radius:3px;flex:none;background:#fff;color:var(--slate);font-size:9px;line-height:12px;text-align:center}
+.em{display:flex;justify-content:space-between;align-items:center;margin:0 0 14px;padding:0 0 8px;border-bottom:.5px solid rgba(255,255,255,.25)}
+.em .dh{margin:0}.em span{font-size:12px;color:rgba(255,255,255,.6)}
+.msg{text-align:center;padding:48px 16px}
+.msg p{margin:0 0 16px;font-size:15px}
+.msg button{color:#fff;border-color:rgba(255,255,255,.6);font-size:15px;padding:10px 18px}
+.msg button:hover{background:rgba(255,255,255,.12)}
+#err{color:#FFD2D0}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1 id="h1">This week</h1>
+<p id="sum">&nbsp;</p>
+<div class="nav" id="nav" hidden>
+<button id="prev" aria-label="Previous week">Previous</button>
+<button id="today">Today</button>
+<button id="next" aria-label="Next week">Next</button>
+<button id="out">Sign out</button>
+</div>
+</header>
+<main id="main">
+<div class="msg"><p>See your Google Calendar events and tasks for the week on one board.</p><button id="in">Sign in with Google</button><p id="err"></p></div>
+</main>
+</div>
+<script>
+const CLIENT_ID="67472366673-3negm5irict0ovr8a5mrisibjeto2em2.apps.googleusercontent.com";
+const SCOPES="https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly";
+const $=id=>document.getElementById(id);
+let token=null,tc=null,weekStart=sunday(new Date());
+function sunday(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-x.getDay());return x}
+function key(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function fmt(d){return d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}).toLowerCase()}
+async function api(url){
+  const r=await fetch(url,{headers:{Authorization:"Bearer "+token}});
+  if(r.status===401){token=null;localStorage.removeItem("wb_in");throw new Error("Your session expired. Sign in again.")}
+  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error((j.error&&j.error.message)||"Google returned an error ("+r.status+")")}
+  return r.json();
+}
+function init(){
+  if(!window.google||!google.accounts){setTimeout(init,150);return}
+  tc=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPES,callback:r=>{
+    if(r.error){$("err").textContent="Sign-in didn't complete. Try again.";return}
+    token=r.access_token;localStorage.setItem("wb_in","1");load(true);
+  }});
+  if(localStorage.getItem("wb_in"))tc.requestAccessToken({prompt:""});
+}
+$("in").onclick=()=>tc&&tc.requestAccessToken({prompt:"consent"});
+$("out").onclick=()=>{if(token)google.accounts.oauth2.revoke(token);token=null;localStorage.removeItem("wb_in");location.reload()};
+$("prev").onclick=()=>{weekStart.setDate(weekStart.getDate()-7);load(false)};
+$("next").onclick=()=>{weekStart.setDate(weekStart.getDate()+7);load(false)};
+$("today").onclick=()=>{weekStart=sunday(new Date());load(true)};
+async function load(scroll){
+  $("nav").hidden=false;
+  $("main").innerHTML='<div class="msg"><p>Loading your week…</p></div>';
+  const end=new Date(weekStart);end.setDate(end.getDate()+7);
+  const days=[...Array(7)].map((_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return {d,k:key(d),ev:[],tk:[]}});
+  const idx=Object.fromEntries(days.map(x=>[x.k,x]));
+  try{
+    const cals=(await api("https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader")).items.filter(c=>c.selected!==false);
+    const q="?singleEvents=true&orderBy=startTime&maxResults=250&timeMin="+encodeURIComponent(weekStart.toISOString())+"&timeMax="+encodeURIComponent(end.toISOString());
+    const evs=await Promise.all(cals.map(c=>api("https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(c.id)+"/events"+q).then(r=>r.items||[])));
+    evs.flat().forEach(e=>{
+      if(e.status==="cancelled")return;
+      if(e.start.date){
+        const s=new Date(e.start.date+"T00:00"),f=new Date(e.end.date+"T00:00");
+        for(let d=new Date(s);d<f;d.setDate(d.getDate()+1)){const x=idx[key(d)];if(x)x.ev.push({t:e.summary||"(No title)",time:"All day",sort:-1,u:e.htmlLink})}
+      }else{
+        const s=new Date(e.start.dateTime),x=idx[key(s)];
+        if(x)x.ev.push({t:e.summary||"(No title)",time:fmt(s),sort:s.getTime(),u:e.htmlLink});
+      }
+    });
+    const lists=(await api("https://tasks.googleapis.com/tasks/v1/users/@me/lists")).items||[];
+    const dmin=weekStart.getFullYear()+"-"+String(weekStart.getMonth()+1).padStart(2,"0")+"-"+String(weekStart.getDate()).padStart(2,"0")+"T00:00:00Z";
+    const last=new Date(end);last.setDate(last.getDate()-1);
+    const dmax=key(last)+"T23:59:59Z";
+    const tks=await Promise.all(lists.map(l=>api("https://tasks.googleapis.com/tasks/v1/lists/"+l.id+"/tasks?showCompleted=true&showHidden=true&maxResults=100&dueMin="+encodeURIComponent(dmin)+"&dueMax="+encodeURIComponent(dmax)).then(r=>r.items||[])));
+    tks.flat().forEach(t=>{if(!t.due||!t.title)return;const x=idx[t.due.slice(0,10)];if(x)x.tk.push({t:t.title,done:t.status==="completed"})});
+    render(days);
+    if(scroll){const el=document.querySelector("[data-today]");if(el)el.scrollIntoView({block:"start"})}
+  }catch(e){
+    $("main").innerHTML='<div class="msg"><p id="err">'+esc(e.message)+'</p><button id="retry">'+(token?"Retry":"Sign in with Google")+'</button></div>';
+    $("retry").onclick=()=>token?load(false):tc.requestAccessToken({prompt:"consent"});
+  }
+}
+function render(days){
+  const tk=key(new Date());
+  const first=days[0].d,last=days[6].d;
+  const mo=d=>d.toLocaleDateString("en-US",{month:"short"}).toUpperCase();
+  $("h1").innerHTML=weekStart.getTime()===sunday(new Date()).getTime()?"This week":"Week of";
+  $("h1").innerHTML+="<br>"+first.getDate()+" "+mo(first)+" – "+last.getDate()+" "+mo(last);
+  const ne=days.reduce((a,x)=>a+x.ev.length,0),nt=days.reduce((a,x)=>a+x.tk.filter(t=>!t.done).length,0);
+  $("sum").textContent=ne+" event"+(ne===1?"":"s")+" · "+nt+" task"+(nt===1?"":"s")+" open";
+  $("main").innerHTML=days.map(x=>{
+    const isT=x.k===tk;
+    const lab=x.d.toLocaleDateString("en-US",{weekday:"short"})+" "+x.d.getDate();
+    const tag=isT?'<span class="tag">today</span>':"";
+    if(!x.ev.length&&!x.tk.length)return '<div class="em"'+(isT?" data-today":"")+'><p class="dh">'+lab+tag+'</p><span>Nothing scheduled</span></div>';
+    x.ev.sort((a,b)=>a.sort-b.sort);
+    const evs=x.ev.map(e=>'<a class="n'+(isT?" now":"")+'" href="'+esc(e.u)+'" target="_blank" rel="noopener"><b>'+esc(e.t)+'</b><span>'+e.time+'</span></a>').join("");
+    const tks=x.tk.map(t=>'<div class="t"><span class="'+(t.done?"dn":"bx")+'">'+(t.done?"✓":"")+'</span>'+esc(t.t)+'</div>').join("");
+    return '<section class="day"'+(isT?" data-today":"")+'><p class="dh">'+lab+tag+'</p><div class="g">'+evs+tks+'</div></section>';
+  }).join("");
+}
+init();
+</script>
+</body>
+</html>

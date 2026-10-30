@@ -37,7 +37,13 @@ main{width:100%;padding:20px var(--pad) 48px}
 .msg button{color:#fff;border-color:rgba(255,255,255,.6);font-size:15px;padding:10px 18px}
 .msg button:hover{background:rgba(255,255,255,.12)}
 #err{color:#FFD2D0}
+.left{display:none}
 @media (min-width:1100px){
+header{display:flex;justify-content:space-between;align-items:center;gap:48px;padding-top:28px;padding-bottom:22px}
+.left{display:block;text-align:left;max-width:62ch}
+.left h2{margin:0 0 10px;font-size:clamp(22px,2.2vw,32px);line-height:1.15;font-weight:700;color:var(--ink);text-transform:uppercase}
+.left p{margin:0;font-size:clamp(16px,1.5vw,21px);line-height:1.45;color:#2B2B2B}
+.right{text-align:right;flex:none}
 main{display:grid;grid-template-columns:var(--cols,repeat(7,minmax(0,1fr)));gap:14px;align-items:stretch}
 main .msg{grid-column:1/-1}
 .day,.em{margin:0;background:rgba(0,0,0,.16);border-radius:8px;padding:12px;border-top:3px solid transparent;min-width:0}
@@ -52,6 +58,8 @@ main .msg{grid-column:1/-1}
 <body>
 <div class="wrap">
 <header>
+<div class="left"><h2 id="greet"></h2><p id="quote"></p></div>
+<div class="right">
 <h1 id="h1">This week</h1>
 <p id="sum">&nbsp;</p>
 <div class="nav" id="nav" hidden>
@@ -59,6 +67,7 @@ main .msg{grid-column:1/-1}
 <button id="today">Today</button>
 <button id="next" aria-label="Next week">Next</button>
 <button id="out">Sign out</button>
+</div>
 </div>
 </header>
 <main id="main">
@@ -146,6 +155,27 @@ function render(days){
   }).join("");
   $("main").style.setProperty("--cols",days.map(x=>(x.ev.length||x.tk.length)?"minmax(0,1fr)":"minmax(0,.6fr)").join(" "));
 }
+const QUOTES=[
+"Do the hard thing first. Everything else gets easier by lunch.",
+"A short list you finish beats a long list you admire.",
+"Protect one block of time today and don't give it away.",
+"Busy is a feeling. Done is a fact.",
+"Decide what not to do before you decide what to do.",
+"Small steps taken today beat big plans filed for later.",
+"Start before you feel ready. Clarity comes from motion.",
+"Your calendar is a record of what you value. Check it.",
+"One focused hour is worth three scattered ones.",
+"Say no early so you can say yes properly.",
+"Rest is part of the work, not the opposite of it.",
+"Finish the week the way you'd like to start the next."
+];
+function hello(){
+  const n=new Date(),h=n.getHours();
+  $("greet").textContent=h<12?"Good morning":h<18?"Good afternoon":"Good evening";
+  const doy=Math.floor((n-new Date(n.getFullYear(),0,0))/864e5);
+  $("quote").textContent=QUOTES[doy%QUOTES.length];
+}
+hello();
 init();
 </script>
 </body>

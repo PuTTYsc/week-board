@@ -27,7 +27,9 @@ main{width:100%;padding:20px var(--pad) 48px}
 .n b{display:block;font-weight:600}
 .n span{font-size:12px;color:var(--sub)}
 .now{border-left:3px solid var(--coral);border-radius:0 6px 6px 0}
-.t{border:1px solid rgba(255,255,255,.55);border-radius:6px;padding:10px 12px;font-size:14px;display:flex;gap:8px;align-items:center;line-height:1.3}
+.t{font:inherit;color:#fff;background:transparent;width:100%;text-align:left;border:1px solid rgba(255,255,255,.55);border-radius:6px;padding:10px 12px;font-size:14px;display:flex;gap:8px;align-items:center;line-height:1.3;cursor:pointer}
+.t:hover{background:rgba(255,255,255,.1)}
+.t.done{opacity:.65;text-decoration:line-through}
 .bx{width:12px;height:12px;border:1.5px solid #fff;border-radius:3px;flex:none}
 .dn{width:12px;height:12px;border-radius:3px;flex:none;background:#fff;color:var(--slate);font-size:9px;line-height:12px;text-align:center}
 .em{display:flex;justify-content:space-between;align-items:center;margin:0 0 16px;padding:0 0 8px;border-bottom:.5px solid rgba(255,255,255,.25);scroll-margin-top:12px}
@@ -39,6 +41,11 @@ main{width:100%;padding:20px var(--pad) 48px}
 #err{color:#FFD2D0}
 .left{display:none}
 .dt{display:block}
+.btn{font:inherit;font-size:13px;display:inline-block;text-decoration:none;background:var(--coral);color:#fff;border:1px solid var(--coral);border-radius:6px;padding:6px 12px;cursor:pointer}
+.btn:hover{opacity:.9}
+.btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(92vw,520px);background:var(--ink);color:#fff;border:1px solid rgba(255,255,255,.3);padding:10px 14px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .15s}
+#toast.on{opacity:1}
 @media (min-width:1100px){
 header{display:flex;justify-content:space-between;align-items:flex-start;gap:48px;padding-top:18px;padding-bottom:16px}
 h1{font-size:clamp(24px,2.4vw,34px)}
@@ -72,6 +79,8 @@ main .msg{grid-column:1/-1}
 <button id="prev" aria-label="Previous week">Previous</button>
 <button id="today">Today</button>
 <button id="next" aria-label="Next week">Next</button>
+<a class="btn" id="addEv" href="https://calendar.google.com/calendar/r/eventedit" target="_blank" rel="noopener">Add event</a>
+<a class="btn" id="addTk" href="https://calendar.google.com/calendar/r/eventedit?tab=rt" target="_blank" rel="noopener">Add task</a>
 <button id="out">Sign out</button>
 </div>
 </div>
@@ -80,17 +89,18 @@ main .msg{grid-column:1/-1}
 <div class="msg"><p>See your Google Calendar events and tasks for the week on one board.</p><button id="in">Sign in with Google</button><p id="err"></p></div>
 </main>
 </div>
+<div id="toast" role="status" aria-live="polite"></div>
 <script>
 const CLIENT_ID="67472366673-3negm5irict0ovr8a5mrisibjeto2em2.apps.googleusercontent.com";
-const SCOPES="https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly";
+const SCOPES="https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks";
 const $=id=>document.getElementById(id);
-let token=null,tc=null,weekStart=sunday(new Date());
+let token=null,tc=null,cur=null,silent=false,weekStart=sunday(new Date());
 function sunday(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-x.getDay());return x}
 function key(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
 function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function fmt(d){return d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}).toLowerCase()}
-async function api(url){
-  const r=await fetch(url,{headers:{Authorization:"Bearer "+token}});
+async function api(url,opt={}){
+  const r=await fetch(url,{...opt,headers:{Authorization:"Bearer "+token,...(opt.body?{"Content-Type":"application/json"}:{})}});
   if(r.status===401){token=null;localStorage.removeItem("wb_in");throw new Error("Your session expired. Sign in again.")}
   if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error((j.error&&j.error.message)||"Google returned an error ("+r.status+")")}
   return r.json();
@@ -98,12 +108,13 @@ async function api(url){
 function init(){
   if(!window.google||!google.accounts){setTimeout(init,150);return}
   tc=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:SCOPES,callback:r=>{
-    if(r.error){$("err").textContent="Sign-in didn't complete. Try again.";return}
+    const quiet=silent;silent=false;
+    if(r.error){if(!quiet&&$("err"))$("err").textContent="Sign-in didn't complete. Try again.";return}
     token=r.access_token;localStorage.setItem("wb_in","1");load(true);
   }});
-  if(localStorage.getItem("wb_in"))tc.requestAccessToken({prompt:""});
+  if(localStorage.getItem("wb_in")){silent=true;tc.requestAccessToken({prompt:""})}
 }
-$("in").onclick=()=>tc&&tc.requestAccessToken({prompt:"consent"});
+$("in").onclick=()=>{if(tc){silent=false;tc.requestAccessToken({prompt:"consent"})}};
 $("out").onclick=()=>{if(token)google.accounts.oauth2.revoke(token);token=null;localStorage.removeItem("wb_in");location.reload()};
 $("prev").onclick=()=>{weekStart.setDate(weekStart.getDate()-7);load(false)};
 $("next").onclick=()=>{weekStart.setDate(weekStart.getDate()+7);load(false)};
@@ -115,7 +126,9 @@ async function load(scroll){
   const days=[...Array(7)].map((_,i)=>{const d=new Date(weekStart);d.setDate(d.getDate()+i);return {d,k:key(d),ev:[],tk:[]}});
   const idx=Object.fromEntries(days.map(x=>[x.k,x]));
   try{
-    const cals=(await api("https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader")).items.filter(c=>c.selected!==false);
+    const cl=(await api("https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=reader")).items;
+    const pr=cl.find(c=>c.primary);if(pr)setLinks(pr.id);
+    const cals=cl.filter(c=>c.selected!==false);
     const q="?singleEvents=true&orderBy=startTime&maxResults=250&timeMin="+encodeURIComponent(weekStart.toISOString())+"&timeMax="+encodeURIComponent(end.toISOString());
     const evs=await Promise.all(cals.map(c=>api("https://www.googleapis.com/calendar/v3/calendars/"+encodeURIComponent(c.id)+"/events"+q).then(r=>r.items||[])));
     evs.flat().forEach(e=>{
@@ -132,8 +145,8 @@ async function load(scroll){
     const dmin=key(weekStart)+"T00:00:00Z";
     const last=new Date(end);last.setDate(last.getDate()-1);
     const dmax=key(last)+"T23:59:59Z";
-    const tks=await Promise.all(lists.map(l=>api("https://tasks.googleapis.com/tasks/v1/lists/"+l.id+"/tasks?showCompleted=true&showHidden=true&maxResults=100&dueMin="+encodeURIComponent(dmin)+"&dueMax="+encodeURIComponent(dmax)).then(r=>r.items||[])));
-    tks.flat().forEach(t=>{if(!t.due||!t.title)return;const x=idx[t.due.slice(0,10)];if(x)x.tk.push({t:t.title,done:t.status==="completed"})});
+    const tks=await Promise.all(lists.map(l=>api("https://tasks.googleapis.com/tasks/v1/lists/"+l.id+"/tasks?showCompleted=true&showHidden=true&maxResults=100&dueMin="+encodeURIComponent(dmin)+"&dueMax="+encodeURIComponent(dmax)).then(r=>(r.items||[]).map(t=>({...t,_l:l.id})))));
+    tks.flat().forEach(t=>{if(!t.due||!t.title)return;const x=idx[t.due.slice(0,10)];if(x)x.tk.push({t:t.title,done:t.status==="completed",id:t.id,l:t._l})});
     render(days);
     if(scroll){const el=document.querySelector("[data-today]");if(el)el.scrollIntoView({block:"start"})}
   }catch(e){
@@ -142,6 +155,7 @@ async function load(scroll){
   }
 }
 function render(days){
+  cur=days;
   const tk=key(new Date());
   const first=days[0].d,last=days[6].d;
   const mo=d=>d.toLocaleDateString("en-US",{month:"short"}).toUpperCase();
@@ -157,11 +171,31 @@ function render(days){
     if(!x.ev.length&&!x.tk.length)return '<div class="em"'+(isT?" data-today":"")+'><p class="dh">'+lab+tag+'</p><span>Nothing scheduled</span></div>';
     x.ev.sort((a,b)=>a.sort-b.sort);
     const evs=x.ev.map(e=>'<a class="n'+(isT?" now":"")+'" href="'+esc(e.u)+'" target="_blank" rel="noopener"><b>'+esc(e.t)+'</b><span>'+e.time+'</span></a>').join("");
-    const tks=x.tk.map(t=>'<div class="t"><span class="'+(t.done?"dn":"bx")+'">'+(t.done?"✓":"")+'</span>'+esc(t.t)+'</div>').join("");
+    const tks=x.tk.map(t=>'<button type="button" class="t'+(t.done?" done":"")+'" data-l="'+esc(t.l)+'" data-i="'+esc(t.id)+'" aria-pressed="'+t.done+'"><span class="'+(t.done?"dn":"bx")+'">'+(t.done?"✓":"")+'</span>'+esc(t.t)+'</button>').join("");
     return '<section class="day"'+(isT?" data-today":"")+'><p class="dh">'+lab+tag+'</p><div class="g">'+evs+tks+'</div></section>';
   }).join("");
   $("main").style.setProperty("--cols",days.map(x=>(x.ev.length||x.tk.length)?"minmax(0,1fr)":"minmax(0,.6fr)").join(" "));
 }
+let tt;
+function toast(m){const el=$("toast");el.textContent=m;el.classList.add("on");clearTimeout(tt);tt=setTimeout(()=>el.classList.remove("on"),5000)}
+function setLinks(a){
+  const q=a?"authuser="+encodeURIComponent(a):"";
+  $("addEv").href="https://calendar.google.com/calendar/r/eventedit"+(q?"?"+q:"");
+  $("addTk").href="https://calendar.google.com/calendar/r/eventedit?tab=rt"+(q?"&"+q:"");
+}
+async function toggle(l,i){
+  let tk=null;cur.forEach(x=>x.tk.forEach(t=>{if(t.id===i&&t.l===l)tk=t}));
+  if(!tk||tk.busy)return;
+  const was=tk.done;tk.done=!was;tk.busy=true;render(cur);
+  try{
+    await api("https://tasks.googleapis.com/tasks/v1/lists/"+encodeURIComponent(l)+"/tasks/"+encodeURIComponent(i),{method:"PATCH",body:JSON.stringify(was?{status:"needsAction",completed:null}:{status:"completed"})});
+  }catch(e){
+    tk.done=was;render(cur);
+    toast(/insufficient|permission|scope|403/i.test(e.message)?"Google didn't allow that change. Sign out, then sign in again to grant task access.":"Couldn't update that task. "+e.message);
+  }
+  tk.busy=false;
+}
+$("main").onclick=e=>{const b=e.target.closest(".t");if(b&&cur)toggle(b.dataset.l,b.dataset.i)};
 function hello(){
   const h=new Date().getHours();
   $("greet").textContent=h<12?"Good morning":h<18?"Good afternoon":"Good evening";

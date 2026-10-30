@@ -221,8 +221,11 @@ $("tkf").onsubmit=async e=>{
   if(!title||!d)return;
   $("tks").disabled=true;$("tke").textContent="";
   try{
-    await api("https://tasks.googleapis.com/tasks/v1/lists/@default/tasks",{method:"POST",body:JSON.stringify({title,due:d+"T00:00:00.000Z"})});
-    $("tkd").close();toast("Task added");load(false);
+    const res=await api("https://tasks.googleapis.com/tasks/v1/lists/@default/tasks",{method:"POST",body:JSON.stringify({title,due:d+"T00:00:00.000Z"})});
+    $("tkd").close();
+    const x=cur&&cur.find(z=>z.k===d);
+    if(x){x.tk.push({t:title,done:false,id:res.id,l:"@default"});render(cur);toast("Task added")}
+    else toast("Task added for "+d+", which is outside this week");
   }catch(err){
     $("tke").textContent=/insufficient|permission|scope|403/i.test(err.message)?"Google didn't allow that. Sign out, then sign in again to grant task access.":"Couldn't add the task. "+err.message;
   }

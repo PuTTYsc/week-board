@@ -42,10 +42,19 @@ main{width:100%;padding:20px var(--pad) 48px}
 .left{display:none}
 .dt{display:block}
 .btn{font:inherit;font-size:13px;display:inline-block;text-decoration:none;background:var(--coral);color:#fff;border:1px solid var(--coral);border-radius:6px;padding:6px 12px;cursor:pointer}
-.btn:hover{opacity:.9}
+.btn:hover{opacity:.9;background:var(--coral)}
 .btn:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);max-width:min(92vw,520px);background:var(--ink);color:#fff;border:1px solid rgba(255,255,255,.3);padding:10px 14px;border-radius:8px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .15s}
 #toast.on{opacity:1}
+dialog{background:var(--slate);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:20px;width:min(92vw,420px)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h2{margin:0 0 16px;font-size:20px;text-transform:uppercase}
+dialog label{display:block;font-size:13px;margin:0 0 14px}
+dialog input{display:block;width:100%;margin-top:6px;padding:10px;font:inherit;font-size:16px;color:#fff;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.4);border-radius:6px;color-scheme:dark}
+dialog input:focus-visible{outline:2px solid var(--coral);outline-offset:1px}
+dialog .row{display:flex;gap:8px;justify-content:flex-end}
+dialog .row button:not(.btn){color:#fff;border-color:rgba(255,255,255,.5)}
+#tke{margin:0 0 12px;font-size:13px;color:#FFD2D0;min-height:0}
 @media (min-width:1100px){
 header{display:flex;justify-content:space-between;align-items:flex-start;gap:48px;padding-top:18px;padding-bottom:16px}
 h1{font-size:clamp(24px,2.4vw,34px)}
@@ -80,7 +89,7 @@ main .msg{grid-column:1/-1}
 <button id="today">Today</button>
 <button id="next" aria-label="Next week">Next</button>
 <a class="btn" id="addEv" href="https://calendar.google.com/calendar/r/eventedit" target="_blank" rel="noopener">Add event</a>
-<a class="btn" id="addTk" href="https://calendar.google.com/calendar/r/eventedit?tab=rt" target="_blank" rel="noopener">Add task</a>
+<button type="button" class="btn" id="addTk">Add task</button>
 <button id="out">Sign out</button>
 </div>
 </div>
@@ -89,6 +98,15 @@ main .msg{grid-column:1/-1}
 <div class="msg"><p>See your Google Calendar events and tasks for the week on one board.</p><button id="in">Sign in with Google</button><p id="err"></p></div>
 </main>
 </div>
+<dialog id="tkd">
+<form id="tkf">
+<h2>Add task</h2>
+<label>Title<input id="tkt" required maxlength="500" autocomplete="off"></label>
+<label>Due date<input id="tkdte" type="date" required></label>
+<p id="tke" role="alert"></p>
+<div class="row"><button type="button" id="tkx">Cancel</button><button type="submit" class="btn" id="tks">Add task</button></div>
+</form>
+</dialog>
 <div id="toast" role="status" aria-live="polite"></div>
 <script>
 const CLIENT_ID="67472366673-3negm5irict0ovr8a5mrisibjeto2em2.apps.googleusercontent.com";
@@ -181,7 +199,6 @@ function toast(m){const el=$("toast");el.textContent=m;el.classList.add("on");cl
 function setLinks(a){
   const q=a?"authuser="+encodeURIComponent(a):"";
   $("addEv").href="https://calendar.google.com/calendar/r/eventedit"+(q?"?"+q:"");
-  $("addTk").href="https://calendar.google.com/calendar/r/eventedit?tab=rt"+(q?"&"+q:"");
 }
 async function toggle(l,i){
   let tk=null;cur.forEach(x=>x.tk.forEach(t=>{if(t.id===i&&t.l===l)tk=t}));
@@ -196,6 +213,21 @@ async function toggle(l,i){
   tk.busy=false;
 }
 $("main").onclick=e=>{const b=e.target.closest(".t");if(b&&cur)toggle(b.dataset.l,b.dataset.i)};
+$("addTk").onclick=()=>{$("tkt").value="";$("tkdte").value=key(new Date());$("tke").textContent="";$("tkd").showModal();$("tkt").focus()};
+$("tkx").onclick=()=>$("tkd").close();
+$("tkf").onsubmit=async e=>{
+  e.preventDefault();
+  const title=$("tkt").value.trim(),d=$("tkdte").value;
+  if(!title||!d)return;
+  $("tks").disabled=true;$("tke").textContent="";
+  try{
+    await api("https://tasks.googleapis.com/tasks/v1/lists/@default/tasks",{method:"POST",body:JSON.stringify({title,due:d+"T00:00:00.000Z"})});
+    $("tkd").close();toast("Task added");load(false);
+  }catch(err){
+    $("tke").textContent=/insufficient|permission|scope|403/i.test(err.message)?"Google didn't allow that. Sign out, then sign in again to grant task access.":"Couldn't add the task. "+err.message;
+  }
+  $("tks").disabled=false;
+};
 function hello(){
   const h=new Date().getHours();
   $("greet").textContent=h<12?"Good morning":h<18?"Good afternoon":"Good evening";
